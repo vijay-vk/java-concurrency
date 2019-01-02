@@ -1,4 +1,4 @@
-package org.learning.concurrency.javaconcurrency;
+package org.learning.javaconcurrency;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
