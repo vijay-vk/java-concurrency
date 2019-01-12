@@ -1,21 +1,18 @@
 package org.learning.javaconcurrency.service;
 
-import java.util.concurrent.TimeUnit;
-
 /**
  * Created by vkasiviswanathan on 1/6/19.
  */
 public class UserService {
 
-    public static String getUserDetails() {
+	public static String getUserDetails() {
+		long startTime = System.currentTimeMillis();
+		RandomOperation.sort();
+		long endTime = System.currentTimeMillis();
+		long timeTaken = endTime - startTime;
+		System.out.println("Time taken to get UserDetails is :: " + timeTaken + " - in Thread "
+				+ Thread.currentThread().getName());
 
-        try {
-        	System.out.println("User Details - " + Thread.currentThread().getName());
-            TimeUnit.SECONDS.sleep(2);
-        } catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-            e.printStackTrace();
-        }
-        return "User Details - ";
-    }
+		return "User Details - ";
+	}
 }

@@ -1,7 +1,5 @@
 package org.learning.javaconcurrency.service;
 
-import java.util.concurrent.TimeUnit;
-
 /**
  * Created by vkasiviswanathan on 1/6/19.
  */
@@ -9,13 +7,12 @@ public class ActivityService {
 
 	public static String getActivityDetails() {
 
-		try {
-			System.out.println("Activity Details - " + Thread.currentThread().getName());
-			TimeUnit.SECONDS.sleep(3);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			e.printStackTrace();
-		}
+		long startTime = System.currentTimeMillis();
+		RandomOperation.sort();
+		long endTime = System.currentTimeMillis();
+		long timeTaken = endTime - startTime;
+		System.out.println("Time taken to get ActivityDetails is :: " + timeTaken + " - in Thread "
+				+ Thread.currentThread().getName());
 		return "Activity Details - ";
 	}
 }

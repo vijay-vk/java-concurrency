@@ -15,7 +15,7 @@ import com.lmax.disruptor.dsl.Disruptor;
 public class DisruptorService {
 
 	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024,
-			Executors.defaultThreadFactory());
+			Executors.newFixedThreadPool(3));
 	
 	private Producer producer = new Producer();
 

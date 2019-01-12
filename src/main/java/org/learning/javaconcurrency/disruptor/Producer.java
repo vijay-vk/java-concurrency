@@ -14,6 +14,7 @@ public class Producer {
 
 		try {
 			Event event = ringBuffer.get(sequence);
+			event.setStartTime(System.currentTimeMillis());
 			StringBuilder sb = new StringBuilder();
 			event.setResponse(sb);
 			event.setHttpResponse(response);

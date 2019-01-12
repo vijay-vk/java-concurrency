@@ -8,6 +8,7 @@ public class Event {
 	private String userDetails;
 	private String activityDetails;
 	private AsyncResponse httpResponse;
+	private long startTime;
 
 	public StringBuilder getResponse() {
 		return response;
@@ -39,5 +40,13 @@ public class Event {
 
 	public void setHttpResponse(AsyncResponse httpResponse) {
 		this.httpResponse = httpResponse;
+	}
+
+	public long getStartTime() {
+		return startTime;
+	}
+
+	public void setStartTime(long startTime) {
+		this.startTime = startTime;
 	}
 }

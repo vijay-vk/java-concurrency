@@ -1,7 +1,5 @@
 package org.learning.javaconcurrency.sequential;
 
-import java.util.concurrent.TimeUnit;
-
 import org.learning.javaconcurrency.service.ActivityService;
 import org.learning.javaconcurrency.service.UserService;
 import org.springframework.stereotype.Component;
@@ -12,13 +10,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class SequentialService {
 
-    public String getResponse() {
-    	// time to build response
-		try {
-			TimeUnit.SECONDS.sleep(1);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-        return UserService.getUserDetails() + ActivityService.getActivityDetails();
-    }
+	public String getResponse() {
+		long startTime = System.currentTimeMillis();
+		String response = UserService.getUserDetails() + ActivityService.getActivityDetails();
+		long endTime = System.currentTimeMillis();
+		long timeTaken = endTime - startTime;
+		System.out.println("Time taken to build response from SequentialService :: " + timeTaken + " - in Thread "
+				+ Thread.currentThread().getName());
+
+		return response;
+	}
 }
