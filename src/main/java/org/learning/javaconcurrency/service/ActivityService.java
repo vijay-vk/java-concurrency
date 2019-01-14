@@ -8,7 +8,7 @@ public class ActivityService {
 	public static String getActivityDetails() {
 
 		long startTime = System.currentTimeMillis();
-		RandomOperation.sort();
+		RandomOperation.sortLong();
 		long endTime = System.currentTimeMillis();
 		long timeTaken = endTime - startTime;
 		System.out.println("Time taken to get ActivityDetails is :: " + timeTaken + " - in Thread "

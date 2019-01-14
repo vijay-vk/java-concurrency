@@ -7,7 +7,7 @@ public class UserService {
 
 	public static String getUserDetails() {
 		long startTime = System.currentTimeMillis();
-		RandomOperation.sort();
+		RandomOperation.sortInt();
 		long endTime = System.currentTimeMillis();
 		long timeTaken = endTime - startTime;
 		System.out.println("Time taken to get UserDetails is :: " + timeTaken + " - in Thread "
