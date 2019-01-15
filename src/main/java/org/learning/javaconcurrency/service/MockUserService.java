@@ -3,16 +3,16 @@ package org.learning.javaconcurrency.service;
 /**
  * Created by vkasiviswanathan on 1/6/19.
  */
-public class ActivityService {
+public class MockUserService {
 
-	public static String getActivityDetails() {
-
+	public static String getUserDetails() {
 		long startTime = System.currentTimeMillis();
-		RandomOperation.sortLong();
+		RandomOperation.getNewIntList();
 		long endTime = System.currentTimeMillis();
 		long timeTaken = endTime - startTime;
-		System.out.println("Time taken to get ActivityDetails is :: " + timeTaken + " - in Thread "
+		System.out.println("Time taken to get UserDetails is :: " + timeTaken + " - in Thread "
 				+ Thread.currentThread().getName());
-		return "Activity Details - ";
+
+		return "User Details - ";
 	}
 }

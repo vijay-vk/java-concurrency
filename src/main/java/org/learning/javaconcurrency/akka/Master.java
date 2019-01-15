@@ -1,12 +1,22 @@
 package org.learning.javaconcurrency.akka;
 
+import java.util.Random;
+
 import javax.ws.rs.container.AsyncResponse;
+
+import org.learning.javaconcurrency.controller.ConcurrencyAnalysisController;
+import org.learning.javaconcurrency.disruptor.Event;
+import org.learning.javaconcurrency.service.ResponseUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 
 public class Master extends AbstractActor {
+
+	private static final Logger LOG = LoggerFactory.getLogger(ConcurrencyAnalysisController.class);
 
 	static public Props props() {
 		return Props.create(Master.class, () -> new Master());
@@ -15,29 +25,12 @@ public class Master extends AbstractActor {
 	static public class Request {
 		public String message;
 		public AsyncResponse httpResponse;
-		public ActorRef userActor;
-		public ActorRef activityActor;
+		public ActorRef worker;
 
-		public Request(String message, AsyncResponse httpResponse, ActorRef userActor, ActorRef activityActor) {
+		public Request(String message, AsyncResponse httpResponse, ActorRef worker) {
 			this.message = message;
 			this.httpResponse = httpResponse;
-			this.userActor = userActor;
-			this.activityActor = activityActor;
-		}
-	}
-
-	static public class Response {
-
-		public String message;
-		public AsyncResponse httpResponse;
-		public String userDetails;
-		public String activityDetails;
-
-		public Response(String message, AsyncResponse httpResponse, String userDetails, String activitydetails) {
-			this.message = message;
-			this.httpResponse = httpResponse;
-			this.userDetails = userDetails;
-			this.activityDetails = activitydetails;
+			this.worker = worker;
 		}
 	}
 
@@ -45,13 +38,23 @@ public class Master extends AbstractActor {
 	public Receive createReceive() {
 		return receiveBuilder().match(Request.class, request -> {
 
-			Response response = new Response("", request.httpResponse, null, null);
+			Event event = new Event();
+			event.httpResponse = request.httpResponse;
+			request.worker.tell(new JsonServiceWorker.Request("posts", event), getSelf());
+			request.worker.tell(new JsonServiceWorker.Request("comments", event), getSelf());
+			request.worker.tell(new JsonServiceWorker.Request("albums", event), getSelf());
+			request.worker.tell(new JsonServiceWorker.Request("photos", event), getSelf());
+		}).match(Event.class, e -> {
+			if (e.posts != null && e.comments != null & e.albums != null & e.photos != null) {
+				int userId = new Random().nextInt(10) + 1;
+				String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, e.posts,
+						e.comments);
+				String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, e.albums,
+						e.photos);
 
-			request.userActor.tell(new UserWorker.User("Get User Details", response), getSelf());
-			request.activityActor.tell(new ActivityWorker.Activity("Get Activity Details", response), getSelf());
-		}).match(Response.class, r -> {
-			if (r.userDetails != null && r.activityDetails != null) {
-				r.httpResponse.resume(r.userDetails + r.activityDetails);
+				String response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
+				LOG.info("Sending Async response in Thread : " + Thread.currentThread().getName());
+				e.httpResponse.resume(response);
 			}
 		}).build();
 	}

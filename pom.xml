@@ -30,19 +30,19 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		
+
 		<dependency>
 			<groupId>com.lmax</groupId>
 			<artifactId>disruptor</artifactId>
 			<version>3.4.2</version>
 		</dependency>
-		
+
 		<dependency>
-		    <groupId>com.typesafe.akka</groupId>
-		    <artifactId>akka-actor_2.12</artifactId>
-		    <version>2.5.19</version>
+			<groupId>com.typesafe.akka</groupId>
+			<artifactId>akka-actor_2.12</artifactId>
+			<version>2.5.19</version>
 		</dependency>
-		
+
 	</dependencies>
 
 	<build>

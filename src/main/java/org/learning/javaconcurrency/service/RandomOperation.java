@@ -1,24 +1,49 @@
 package org.learning.javaconcurrency.service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class RandomOperation {
 
-	public static void sortInt() {
+	private static List<Integer> intList = new ArrayList<>();
+	private static List<Long> longList = new ArrayList<>();
+
+	static {
+		for (int i = 10000000; i > 0; i--) {
+			intList.add(i);
+		}
+
+		for (long i = 10000000; i > 0; i--) {
+			longList.add(i);
+		}
+	}
+
+	public static List<Integer> getIntList() {
+		return intList;
+	}
+
+	public static List<Long> getLongList() {
+		return longList;
+	}
+
+	public static List<Integer> getNewIntList() {
 		List<Integer> list = new ArrayList<>();
 		for (int i = 10000000; i > 0; i--) {
-			list.add(i);
+			int randomValue = ThreadLocalRandom.current().nextInt(10000001);
+			list.add(randomValue);
 		}
-		list.sort(Comparator.naturalOrder());
+
+		return list;
 	}
-	
-	public static void sortLong() {
+
+	public static List<Long> getNewLongList() {
 		List<Long> list = new ArrayList<>();
 		for (long i = 10000000; i > 0; i--) {
-			list.add(i);
+			long randomValue = ThreadLocalRandom.current().nextLong(10000001);
+			list.add(randomValue);
 		}
-		list.sort(Comparator.naturalOrder());
+
+		return list;
 	}
 }
