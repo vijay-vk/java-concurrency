@@ -2,10 +2,7 @@ package org.learning.javaconcurrency.akka;
 
 import java.util.Random;
 
-import javax.ws.rs.container.AsyncResponse;
-
-import org.learning.javaconcurrency.controller.ConcurrencyAnalysisController;
-import org.learning.javaconcurrency.disruptor.Event;
+import org.learning.javaconcurrency.Event;
 import org.learning.javaconcurrency.service.ResponseUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +13,7 @@ import akka.actor.Props;
 
 public class Master extends AbstractActor {
 
-	private static final Logger LOG = LoggerFactory.getLogger(ConcurrencyAnalysisController.class);
+	private static final Logger LOG = LoggerFactory.getLogger(Master.class);
 
 	static public Props props() {
 		return Props.create(Master.class, () -> new Master());
@@ -24,12 +21,12 @@ public class Master extends AbstractActor {
 
 	static public class Request {
 		public String message;
-		public AsyncResponse httpResponse;
+		public Event event;
 		public ActorRef worker;
 
-		public Request(String message, AsyncResponse httpResponse, ActorRef worker) {
+		public Request(String message, Event event, ActorRef worker) {
 			this.message = message;
-			this.httpResponse = httpResponse;
+			this.event = event;
 			this.worker = worker;
 		}
 	}
@@ -38,8 +35,10 @@ public class Master extends AbstractActor {
 	public Receive createReceive() {
 		return receiveBuilder().match(Request.class, request -> {
 
-			Event event = new Event();
-			event.httpResponse = request.httpResponse;
+			// Ideally, immutable data structures should have been used instead
+			// of event.
+
+			Event event = request.event;
 			request.worker.tell(new JsonServiceWorker.Request("posts", event), getSelf());
 			request.worker.tell(new JsonServiceWorker.Request("comments", event), getSelf());
 			request.worker.tell(new JsonServiceWorker.Request("albums", event), getSelf());
@@ -53,8 +52,8 @@ public class Master extends AbstractActor {
 						e.photos);
 
 				String response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
-				LOG.info("Sending Async response in Thread : " + Thread.currentThread().getName());
-				e.httpResponse.resume(response);
+				LOG.info("Building final response in Thread : " + Thread.currentThread().getName());
+				e.response = response;
 			}
 		}).build();
 	}

@@ -15,9 +15,9 @@ public class JsonService {
 	private static final String ALBUMS_API = "https://jsonplaceholder.typicode.com/albums";
 	private static final String PHOTOS_API = "https://jsonplaceholder.typicode.com/photos";
 	//Mocky.io
-//	private static final String POSTS_API = "http://www.mocky.io/v2/5c3ddcc235000012003e9646?mocky-delay=500ms";
+//	private static final String POSTS_API_WITH_DELAY = "http://www.mocky.io/v2/5c3ddcc235000012003e9646?mocky-delay=500ms";
 //	private static final String COMMENTS_API = "https://jsonplaceholder.typicode.com/comments";
-//	private static final String ALBUMS_API = "http://www.mocky.io/v2/5c3ddf1c3500002d003e9651?mocky-delay=500ms";
+//	private static final String ALBUMS_API_WITH_DELAY = "http://www.mocky.io/v2/5c3ddf1c3500002d003e9651?mocky-delay=500ms";
 //	private static final String PHOTOS_API = "https://jsonplaceholder.typicode.com/photos";
 
 	public static String getUsers() {
@@ -47,7 +47,7 @@ public class JsonService {
 
 		return result;
 	}
-
+	
 	public static String getComments() {
 
 		long startTime = System.currentTimeMillis();
@@ -75,7 +75,7 @@ public class JsonService {
 
 		return result;
 	}
-
+	
 	public static String getPhotos() {
 
 		long startTime = System.currentTimeMillis();

@@ -4,8 +4,9 @@ import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+import javax.ws.rs.container.AsyncResponse;
+
 import org.learning.javaconcurrency.CustomThreads;
-import org.learning.javaconcurrency.Event;
 import org.learning.javaconcurrency.service.JsonService;
 import org.learning.javaconcurrency.service.ResponseUtil;
 import org.slf4j.Logger;
@@ -16,34 +17,27 @@ import org.springframework.stereotype.Component;
  * Created by vkasiviswanathan on 1/6/19.
  */
 @Component
-public class AsyncExecutorService {
+public class NonBlockingAsyncExecutorService {
 
-	private static final Logger LOG = LoggerFactory.getLogger(AsyncExecutorService.class);
+	private static final Logger LOG = LoggerFactory.getLogger(NonBlockingAsyncExecutorService.class);
 
-	public String getAsyncResponse(int ioPoolSize, boolean fixedWorkerThreadForNonIoTasks) {
-
-		Event event = new Event();
+	public void sendAsyncResponse(int ioPoolSize, boolean fixedWorkerThreadForNonIoTasks, AsyncResponse httpResponse) {
 
 		try {
+
 			if (ioPoolSize == 0) {
-				useDefaultPoolForIoAndNonIoTasks(event);
+				useDefaultPoolForIoAndNonIoTasks(httpResponse);
 			} else if (fixedWorkerThreadForNonIoTasks) {
-				useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(ioPoolSize, event);
+				useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(ioPoolSize, httpResponse);
 			} else {
-				useCustomThreadPoolForIoAndNonIoTasks(ioPoolSize, event);
+				useCustomThreadPoolForIoAndNonIoTasks(ioPoolSize, httpResponse);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-
-		// blocking call from the thread which handles Http Request
-		while (event.response == null) {
-		}
-		LOG.info("Sending response from AsyncExecutorService : " + Thread.currentThread().getName());
-		return event.response;
 	}
 
-	private void useDefaultPoolForIoAndNonIoTasks(Event event) {
+	private void useDefaultPoolForIoAndNonIoTasks(AsyncResponse httpResponse) {
 
 		int userId = new Random().nextInt(10) + 1;
 		CompletableFuture<String> postsFuture = CompletableFuture.supplyAsync(JsonService::getPosts);
@@ -60,12 +54,12 @@ public class AsyncExecutorService {
 		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
 			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
 			String response = s1 + s2;
-			event.response = response;
+			httpResponse.resume(response);
 		});
 
 	}
 
-	private void useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(int ioPoolSize, Event event) {
+	private void useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(int ioPoolSize, AsyncResponse httpResponse) {
 
 		int userId = new Random().nextInt(10) + 1;
 		ExecutorService ioExecutorService = CustomThreads.getExecutorService(ioPoolSize);
@@ -88,12 +82,12 @@ public class AsyncExecutorService {
 		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
 			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
 			String response = s1 + s2;
-			event.response = response;
+			httpResponse.resume(response);
 		}, CustomThreads.EXECUTOR_SERVICE_WORKER_1);
 
 	}
 
-	private void useCustomThreadPoolForIoAndNonIoTasks(int ioPoolSize, Event event) {
+	private void useCustomThreadPoolForIoAndNonIoTasks(int ioPoolSize, AsyncResponse httpResponse) {
 
 		int userId = new Random().nextInt(10) + 1;
 		ExecutorService ioExecutorService = CustomThreads.getExecutorService(ioPoolSize);
@@ -116,7 +110,7 @@ public class AsyncExecutorService {
 		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
 			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
 			String response = s1 + s2;
-			event.response = response;
+			httpResponse.resume(response);
 		}, ioExecutorService);
 
 	}

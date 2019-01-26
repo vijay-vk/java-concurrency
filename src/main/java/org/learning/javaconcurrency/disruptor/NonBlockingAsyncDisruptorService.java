@@ -5,6 +5,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import javax.ws.rs.container.AsyncResponse;
+
 import org.learning.javaconcurrency.CustomThreads;
 import org.learning.javaconcurrency.Event;
 import org.learning.javaconcurrency.service.JsonService;
@@ -22,13 +24,11 @@ import com.lmax.disruptor.dsl.Disruptor;
  * Created by vkasiviswanathan on 1/6/19.
  */
 @Component
-public class AsyncDisruptorService {
-
-	private static final Logger LOG = LoggerFactory.getLogger(AsyncDisruptorService.class);
+public class NonBlockingAsyncDisruptorService {
 
 	@SuppressWarnings("deprecation")
-	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024,
-			Executors.newFixedThreadPool(3, new CustomizableThreadFactory("Async-Disruptor-Service-Pool-Size-3-")));
+	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024, Executors.newFixedThreadPool(3,
+			new CustomizableThreadFactory("Non-Blocking-Async-Disruptor-Service-Pool-Size-3-")));
 
 	static {
 		DISRUPTOR.handleEventsWith(new PostsAndCommentsResponseBuilder(), new AlbumsAndPhotosResponseBuilder())
@@ -36,12 +36,14 @@ public class AsyncDisruptorService {
 		DISRUPTOR.start();
 	}
 
-	public String getResponse() {
+	public void sendAsyncResponse(AsyncResponse httpResponse) {
 
 		try {
+
 			RingBuffer<Event> ringBuffer = DISRUPTOR.getRingBuffer();
 			long sequence = ringBuffer.next();
 			Event event = ringBuffer.get(sequence);
+			event.asyncHttpResponse = httpResponse;
 			event.startTime = System.currentTimeMillis();
 
 			ExecutorService executorService = CustomThreads.getExecutorService(8);
@@ -70,14 +72,8 @@ public class AsyncDisruptorService {
 				ringBuffer.publish(sequence);
 			}, executorService);
 
-			while (event.response == null) {
-			}
-			LOG.info("Sending response from Async DisruptorService : " + Thread.currentThread().getName());
-			return event.response;
-
 		} catch (Exception e) {
 			e.printStackTrace();
-			throw new RuntimeException("As usual, something unexpected happened :) ");
 		}
 	}
 
@@ -144,7 +140,10 @@ public class AsyncDisruptorService {
 		private void buildAndSendResponse(Event event) {
 
 			String response = event.postsAndCommentsResponse + event.albumsAndPhotosResponse;
-			event.response = response;
+
+			AsyncResponse httpResponse = event.asyncHttpResponse;
+
+			httpResponse.resume(response);
 		}
 	}
 }

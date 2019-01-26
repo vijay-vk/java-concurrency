@@ -4,15 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.learning.javaconcurrency.CustomThreads;
 import org.learning.javaconcurrency.service.JsonService;
 import org.learning.javaconcurrency.service.ResponseUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.concurrent.CustomizableThreadFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,14 +23,7 @@ public class BasicExecutorService {
 
 	private static final Logger LOG = LoggerFactory.getLogger(BasicExecutorService.class);
 
-	public static final ExecutorService EXECUTOR_SERVICE_2 = Executors.newFixedThreadPool(2,
-			new CustomizableThreadFactory("Executor-Service-Pool-Size-2-"));
-	public static final ExecutorService EXECUTOR_SERVICE_4 = Executors.newFixedThreadPool(4,
-			new CustomizableThreadFactory("Executor-Service-Pool-Size-4-"));
-	public static final ExecutorService EXECUTOR_SERVICE_8 = Executors.newFixedThreadPool(8,
-			new CustomizableThreadFactory("Executor-Service-Pool-Size-8-"));
-
-	public String getResponse(int ioPoolSize, int nonIOPoolSize) {
+	public String getResponse(int ioPoolSize, int nonIOPoolSize, boolean fixedWorkerThread) {
 
 		String response = "";
 		long ioTasksStartTime = System.currentTimeMillis();
@@ -42,7 +35,7 @@ public class BasicExecutorService {
 			ioCallableTasks.add(JsonService::getAlbums);
 			ioCallableTasks.add(JsonService::getPhotos);
 
-			ExecutorService ioExecutorService = getExecutorService(ioPoolSize);
+			ExecutorService ioExecutorService = CustomThreads.getExecutorService(ioPoolSize);
 			List<Future<String>> futuresOfIOTasks = ioExecutorService.invokeAll(ioCallableTasks);
 
 			String posts = futuresOfIOTasks.get(0).get();
@@ -59,27 +52,15 @@ public class BasicExecutorService {
 
 			int userId = new Random().nextInt(10) + 1;
 
-			if (nonIOPoolSize < 2) {
-				String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts,
-						comments);
-				String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums,
-						photos);
-
-				response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
+			if (nonIOPoolSize == 0) {
+				response = getResponseByUsingHttpThreadForNonIoTasks(userId, posts, comments, albums, photos);
+			} else if (fixedWorkerThread) {
+				response = getResponseByUsingFixedWorkerThreadsForNonIoTasks(userId, posts, comments, albums, photos);
 			} else {
-
-				List<Callable<String>> nonIoCallableTasks = new ArrayList<>();
-				nonIoCallableTasks.add(() -> ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments));
-				nonIoCallableTasks.add(() -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos));
-
-				ExecutorService nonIOExecutorService = getExecutorService(nonIOPoolSize);
-				List<Future<String>> futuresOfNonIOTasks = nonIOExecutorService.invokeAll(nonIoCallableTasks);
-
-				String postsAndCommentsOfRandomUser = futuresOfNonIOTasks.get(0).get();
-				String albumsAndPhotosOfRandomUser = futuresOfNonIOTasks.get(1).get();
-
-				response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
+				response = getResponseByUsingThreadPoolForNonIoTasks(nonIOPoolSize, userId, posts, comments, albums,
+						photos);
 			}
+
 			long nonIOTasksEndTime = System.currentTimeMillis();
 			LOG.info("Time taken for Executor Service non I/O Tasks :: " + (nonIOTasksEndTime - nonIOTasksStartTime)
 					+ " - in Thread " + Thread.currentThread().getName());
@@ -92,21 +73,53 @@ public class BasicExecutorService {
 		return response;
 	}
 
-	private ExecutorService getExecutorService(int poolSize) {
-		if (poolSize == 2) {
-			return EXECUTOR_SERVICE_2;
-		} else if (poolSize == 4) {
-			return EXECUTOR_SERVICE_4;
-		} else if (poolSize == 8) {
-			return EXECUTOR_SERVICE_8;
-		}
-		return EXECUTOR_SERVICE_2;
+	/*
+	 * run CPU intensive operations in same threads which handles http requests
+	 */
+	private String getResponseByUsingHttpThreadForNonIoTasks(int userId, String posts, String comments, String albums,
+			String photos) {
+
+		String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments);
+		String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos);
+
+		return postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
 	}
 
-	@Override
-	protected void finalize() throws Throwable {
-		EXECUTOR_SERVICE_2.shutdown();
-		EXECUTOR_SERVICE_4.shutdown();
-		EXECUTOR_SERVICE_8.shutdown();
+	/*
+	 * Run CPU Intensive operations in a Fixed worker thread; in this use-case,
+	 * only 2 logical non IO tasks exists, so 2 fixed worker threads have been
+	 * created to handle those 2 tasks
+	 */
+	private String getResponseByUsingFixedWorkerThreadsForNonIoTasks(int userId, String posts, String comments,
+			String albums, String photos) throws InterruptedException, ExecutionException {
+		ExecutorService worker1 = CustomThreads.EXECUTOR_SERVICE_WORKER_1;
+		ExecutorService worker2 = CustomThreads.EXECUTOR_SERVICE_WORKER_2;
+		Future<String> futuresOfWorker1Tasks = worker1
+				.submit(() -> ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments));
+		Future<String> futuresOfWorker2Tasks = worker2
+				.submit(() -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos));
+		String postsAndCommentsOfRandomUser = futuresOfWorker1Tasks.get();
+		String albumsAndPhotosOfRandomUser = futuresOfWorker2Tasks.get();
+
+		return postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
+	}
+
+	/*
+	 * Run CPU Intensive operations in a Thread Pool of given size from request.
+	 */
+	private String getResponseByUsingThreadPoolForNonIoTasks(int nonIOPoolSize, int userId, String posts,
+			String comments, String albums, String photos) throws InterruptedException, ExecutionException {
+
+		List<Callable<String>> nonIoCallableTasks = new ArrayList<>();
+		nonIoCallableTasks.add(() -> ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments));
+		nonIoCallableTasks.add(() -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos));
+
+		ExecutorService nonIOExecutorService = CustomThreads.getExecutorService(nonIOPoolSize);
+		List<Future<String>> futuresOfNonIOTasks = nonIOExecutorService.invokeAll(nonIoCallableTasks);
+
+		String postsAndCommentsOfRandomUser = futuresOfNonIOTasks.get(0).get();
+		String albumsAndPhotosOfRandomUser = futuresOfNonIOTasks.get(1).get();
+
+		return postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
 	}
 }
