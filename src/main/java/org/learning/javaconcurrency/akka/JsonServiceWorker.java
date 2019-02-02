@@ -29,15 +29,19 @@ public class JsonServiceWorker extends AbstractActor {
 			switch (request.message) {
 			case "posts":
 				request.event.posts = JsonService.getPosts();
+				request.event.countDownLatch.countDown();
 				break;
 			case "comments":
 				request.event.comments = JsonService.getComments();
+				request.event.countDownLatch.countDown();
 				break;
 			case "albums":
 				request.event.albums = JsonService.getAlbums();
+				request.event.countDownLatch.countDown();
 				break;
 			case "photos":
 				request.event.photos = JsonService.getPhotos();
+				request.event.countDownLatch.countDown();
 				break;
 
 			default:

@@ -1,13 +1,10 @@
 package org.learning.javaconcurrency.disruptor;
 
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.ws.rs.container.AsyncResponse;
 
-import org.learning.javaconcurrency.CustomThreads;
 import org.learning.javaconcurrency.Event;
 import org.learning.javaconcurrency.service.JsonService;
 import org.learning.javaconcurrency.service.ResponseUtil;
@@ -27,53 +24,30 @@ import com.lmax.disruptor.dsl.Disruptor;
 public class NonBlockingAsyncDisruptorService {
 
 	@SuppressWarnings("deprecation")
-	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024, Executors.newFixedThreadPool(3,
-			new CustomizableThreadFactory("Non-Blocking-Async-Disruptor-Service-Pool-Size-3-")));
+	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024, Executors.newFixedThreadPool(7,
+			new CustomizableThreadFactory("Non-Blocking-Async-Disruptor-Service-Pool-Size-7-")));
 
 	static {
-		DISRUPTOR.handleEventsWith(new PostsAndCommentsResponseBuilder(), new AlbumsAndPhotosResponseBuilder())
+		DISRUPTOR
+				.handleEventsWith((event, sequence, endOfBatch) -> event.posts = JsonService.getPosts(),
+						(event, sequence, endOfBatch) -> event.comments = JsonService.getComments(),
+						(event, sequence, endOfBatch) -> event.albums = JsonService.getAlbums(),
+						(event, sequence, endOfBatch) -> event.photos = JsonService.getPhotos())
+				.then(new PostsAndCommentsResponseBuilder(), new AlbumsAndPhotosResponseBuilder())
 				.then(new MergeAllResponseBuilder());
 		DISRUPTOR.start();
 	}
 
 	public void sendAsyncResponse(AsyncResponse httpResponse) {
 
+		RingBuffer<Event> ringBuffer = DISRUPTOR.getRingBuffer();
+		long sequence = ringBuffer.next();
 		try {
-
-			RingBuffer<Event> ringBuffer = DISRUPTOR.getRingBuffer();
-			long sequence = ringBuffer.next();
 			Event event = ringBuffer.get(sequence);
 			event.asyncHttpResponse = httpResponse;
 			event.startTime = System.currentTimeMillis();
-
-			ExecutorService executorService = CustomThreads.getExecutorService(8);
-			CompletableFuture<String> postsFuture = CompletableFuture.supplyAsync(JsonService::getPosts,
-					executorService);
-			CompletableFuture<String> commentsFuture = CompletableFuture.supplyAsync(JsonService::getComments,
-					executorService);
-			CompletableFuture<String> albumsFuture = CompletableFuture.supplyAsync(JsonService::getAlbums,
-					executorService);
-			CompletableFuture<String> photosFuture = CompletableFuture.supplyAsync(JsonService::getPhotos,
-					executorService);
-
-			CompletableFuture<Void> postsAndCommentsFuture = postsFuture.thenAcceptBothAsync(commentsFuture,
-					(posts, comments) -> {
-						event.posts = posts;
-						event.comments = comments;
-					}, executorService);
-
-			CompletableFuture<Void> albumsAndPhotosFuture = albumsFuture.thenAcceptBothAsync(photosFuture,
-					(albums, photos) -> {
-						event.albums = albums;
-						event.photos = photos;
-					}, executorService);
-
-			postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
-				ringBuffer.publish(sequence);
-			}, executorService);
-
-		} catch (Exception e) {
-			e.printStackTrace();
+		} finally {
+			ringBuffer.publish(sequence);
 		}
 	}
 
@@ -90,11 +64,11 @@ public class NonBlockingAsyncDisruptorService {
 
 		@Override
 		public void onEvent(Event event, long sequence, boolean endOfBatch) throws Exception {
-			buildAndSendResponse(event);
+			buildPostsAndCommentsResponse(event);
 			LOG.info("Build PostsAndCommentsResponseBuilder");
 		}
 
-		private void buildAndSendResponse(Event event) {
+		private void buildPostsAndCommentsResponse(Event event) {
 
 			int userId = new Random().nextInt(10) + 1;
 			String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, event.posts,
@@ -110,11 +84,11 @@ public class NonBlockingAsyncDisruptorService {
 
 		@Override
 		public void onEvent(Event event, long sequence, boolean endOfBatch) throws Exception {
-			buildAndSendResponse(event);
+			buildAlbumsAndPhotosresponse(event);
 			LOG.info("Build AlbumsAndPhotosResponseBuilder ");
 		}
 
-		private void buildAndSendResponse(Event event) {
+		private void buildAlbumsAndPhotosresponse(Event event) {
 
 			int userId = new Random().nextInt(10) + 1;
 			String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, event.albums,
@@ -130,20 +104,21 @@ public class NonBlockingAsyncDisruptorService {
 
 		@Override
 		public void onEvent(Event event, long sequence, boolean endOfBatch) throws Exception {
-			buildAndSendResponse(event);
+
 			long endTime = System.currentTimeMillis();
 			long timeTaken = endTime - event.startTime;
 			LOG.info("Time taken to build response from Disruptor :: " + timeTaken + " - for sequence : " + sequence
 					+ " - in Thread " + Thread.currentThread().getName());
+			buildAndSendResponse(event);
 		}
 
 		private void buildAndSendResponse(Event event) {
 
 			String response = event.postsAndCommentsResponse + event.albumsAndPhotosResponse;
 
-			AsyncResponse httpResponse = event.asyncHttpResponse;
+			AsyncResponse asyncHttpResponse = event.asyncHttpResponse;
 
-			httpResponse.resume(response);
+			asyncHttpResponse.resume(response);
 		}
 	}
 }

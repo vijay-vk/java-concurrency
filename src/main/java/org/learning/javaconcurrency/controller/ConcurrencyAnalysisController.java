@@ -1,5 +1,7 @@
 package org.learning.javaconcurrency.controller;
 
+import java.util.concurrent.CountDownLatch;
+
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -11,12 +13,12 @@ import org.learning.javaconcurrency.Actors;
 import org.learning.javaconcurrency.Event;
 import org.learning.javaconcurrency.akka.Master;
 import org.learning.javaconcurrency.akka.MasterWithParallelConsumer;
-import org.learning.javaconcurrency.disruptor.AsyncDisruptorService;
 import org.learning.javaconcurrency.disruptor.DisruptorService;
 import org.learning.javaconcurrency.disruptor.NonBlockingAsyncDisruptorService;
 import org.learning.javaconcurrency.executor.AsyncExecutorService;
 import org.learning.javaconcurrency.executor.BasicExecutorService;
 import org.learning.javaconcurrency.executor.NonBlockingAsyncExecutorService;
+import org.learning.javaconcurrency.reactive.ReactiveService;
 import org.learning.javaconcurrency.sequential.SequentialService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,10 +60,10 @@ public class ConcurrencyAnalysisController {
 	NonBlockingAsyncExecutorService nonBlockingAsyncExecutorService;
 
 	@Autowired
-	DisruptorService disruptorService;
+	ReactiveService reactiveService;
 
 	@Autowired
-	AsyncDisruptorService asyncDisruptorService;
+	DisruptorService disruptorService;
 
 	@Autowired
 	NonBlockingAsyncDisruptorService nonBlockingAsyncDisruptorService;
@@ -86,7 +88,7 @@ public class ConcurrencyAnalysisController {
 
 	@GET
 	@Path("/async-executor-service")
-	public String analyseAsyncExecutorServiceCompletable(@DefaultValue("0") @QueryParam("ioPoolSize") int ioPoolSize,
+	public String analyseAsyncExecutorServiceCompletable(@DefaultValue("8") @QueryParam("ioPoolSize") int ioPoolSize,
 			@DefaultValue("false") @QueryParam("fixedWorkerThread") boolean fixedWorkerThread) {
 		LOG.info("Analyse Async Executor service");
 		LOG.info("ioPool - " + ioPoolSize + " - fixedWorkerThread - " + fixedWorkerThread);
@@ -96,7 +98,7 @@ public class ConcurrencyAnalysisController {
 	@GET
 	@Path("/non-blocking-async-executor-service")
 	public void analyseNonBlockingAsyncExecutorServiceCompletable(
-			@DefaultValue("0") @QueryParam("ioPoolSize") int ioPoolSize, @Suspended AsyncResponse response,
+			@DefaultValue("8") @QueryParam("ioPoolSize") int ioPoolSize, @Suspended AsyncResponse response,
 			@DefaultValue("false") @QueryParam("fixedWorkerThread") boolean fixedWorkerThread) {
 		LOG.info("Analyse Non-Blocking Async Executor service");
 		LOG.info("ioPool - " + ioPoolSize + " - fixedWorkerThread - " + fixedWorkerThread);
@@ -104,17 +106,17 @@ public class ConcurrencyAnalysisController {
 	}
 
 	@GET
-	@Path("/disruptor")
-	public String analyseDisruptor() {
-		LOG.info("Analyse Disruptor service ");
-		return disruptorService.getResponse();
+	@Path("/reactive")
+	public void rxJava(@Suspended AsyncResponse asyncResponse) {
+		LOG.info("Analyse Reactive service ");
+		reactiveService.sendAsyncResponse(asyncResponse);
 	}
 
 	@GET
-	@Path("/async-disruptor")
-	public String analyseAsyncDisruptorService() {
-		LOG.info("Analyse Async Disruptor service");
-		return asyncDisruptorService.getResponse();
+	@Path("/disruptor")
+	public String disruptor() {
+		LOG.info("Analyse Disruptor service ");
+		return disruptorService.getResponse();
 	}
 
 	@GET
@@ -129,24 +131,26 @@ public class ConcurrencyAnalysisController {
 	public String analyseAkka() {
 		LOG.info("Analyse Akka framework ");
 		Event event = new Event();
+		CountDownLatch countDownLatch = new CountDownLatch(5);
+		event.countDownLatch = countDownLatch;
 		Actors.masterActor.tell(new Master.Request("Get Response", event, Actors.workerActor), ActorRef.noSender());
-		// blocking call
-		while (event.response == null) {
+		try {
+			event.countDownLatch.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
+		LOG.info("Akka - send response from Thread : " + Thread.currentThread().getName());
 		return event.response;
 	}
 
 	@GET
-	@Path("/akka-with-parallel-consumers")
-	public String analyseAkkaWithParallelConsumers() {
+	@Path("/akka-async-with-parallel-consumers")
+	public void analyseAkkaWithParallelConsumers(@Suspended AsyncResponse asyncHttpResponse) {
 		LOG.info("Analyse Akka framework with Parallel Consumers for CPU-Intensive operation");
 		Event event = new Event();
+		event.asyncHttpResponse = asyncHttpResponse;
 		Actors.masterActorWithParallelConsumer.tell(new MasterWithParallelConsumer.Request("Get Response", event,
 				Actors.ioOperationWorker, Actors.workerActor1, Actors.workerActor2), ActorRef.noSender());
-		// blocking call
-		while (event.response == null) {
-		}
-		return event.response;
 	}
 
 	@Override

@@ -1,6 +1,7 @@
 package org.learning.javaconcurrency.disruptor;
 
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
 import org.learning.javaconcurrency.Event;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.WorkHandler;
 import com.lmax.disruptor.dsl.Disruptor;
 
 /**
@@ -25,35 +27,97 @@ public class DisruptorService {
 
 	@SuppressWarnings("deprecation")
 	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024,
-			Executors.newFixedThreadPool(7, new CustomizableThreadFactory("Disruptor-Service-Pool-Size-7-")));
+			Executors.newFixedThreadPool(9, new CustomizableThreadFactory("Disruptor-Service-Pool-Size-9-")));
 
 	static {
-		DISRUPTOR
-				.handleEventsWith((event, sequence, endOfBatch) -> event.posts = JsonService.getPosts(),
-						(event, sequence, endOfBatch) -> event.comments = JsonService.getComments(),
-						(event, sequence, endOfBatch) -> event.albums = JsonService.getAlbums(),
-						(event, sequence, endOfBatch) -> event.photos = JsonService.getPhotos())
-				.then(new PostsAndCommentsResponseBuilder(), new AlbumsAndPhotosResponseBuilder())
-				.then(new MergeAllResponseBuilder());
+		int userId = new Random().nextInt(10) + 1;
+
+		EventHandler<Event> postsApiHandler = (event, sequence, endOfBatch) -> {
+			event.posts = JsonService.getPosts();
+			event.countDownLatch.countDown();
+		};
+		EventHandler<Event> commentsApiHandler = (event, sequence, endOfBatch) -> {
+			event.comments = JsonService.getComments();
+			event.countDownLatch.countDown();
+		};
+		EventHandler<Event> albumsApiHandler = (event, sequence, endOfBatch) -> {
+			event.albums = JsonService.getAlbums();
+			event.countDownLatch.countDown();
+		};
+
+		/*
+		 * Photos API takes bit more time than all three API's above, so worker
+		 * pool has been created for photos API alone.
+		 */
+
+		WorkHandler<Event> photosApiHandler1 = (event) -> {
+			event.photos = JsonService.getPhotos();
+			event.countDownLatch.countDown();
+		};
+		WorkHandler<Event> photosApiHandler2 = (event) -> {
+			event.photos = JsonService.getPhotos();
+			event.countDownLatch.countDown();
+		};
+
+		/*
+		 * Merging the response will be coupled with some CPU-Intensive
+		 * operation, so worker pool has been created for that reason.
+		 */
+
+		WorkHandler<Event> postsAndCommentsResponseHandler1 = (event) -> {
+			event.postsAndCommentsResponse = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, event.posts,
+					event.comments);
+			event.countDownLatch.countDown();
+		};
+
+		WorkHandler<Event> postsAndCommentsResponseHandler2 = (event) -> {
+			event.postsAndCommentsResponse = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, event.posts,
+					event.comments);
+			event.countDownLatch.countDown();
+		};
+
+		WorkHandler<Event> albumsAndPhotosResponseHandler1 = (event) -> {
+			event.albumsAndPhotosResponse = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, event.albums,
+					event.photos);
+			event.countDownLatch.countDown();
+		};
+
+		WorkHandler<Event> albumsAndPhotosResponseHandler2 = (event) -> {
+			event.albumsAndPhotosResponse = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, event.albums,
+					event.photos);
+			event.countDownLatch.countDown();
+		};
+
+		DISRUPTOR.handleEventsWith(postsApiHandler, commentsApiHandler, albumsApiHandler)
+				.handleEventsWithWorkerPool(photosApiHandler1, photosApiHandler2)
+				.thenHandleEventsWithWorkerPool(postsAndCommentsResponseHandler1, postsAndCommentsResponseHandler2)
+				.handleEventsWithWorkerPool(albumsAndPhotosResponseHandler1, albumsAndPhotosResponseHandler2);
 		DISRUPTOR.start();
+
 	}
 
 	public String getResponse() {
-
+		Event event = null;
 		RingBuffer<Event> ringBuffer = DISRUPTOR.getRingBuffer();
 		long sequence = ringBuffer.next();
-		Event event = null;
+		CountDownLatch countDownLatch = new CountDownLatch(6);
+
 		try {
 			event = ringBuffer.get(sequence);
+			event.countDownLatch = countDownLatch;
 			event.startTime = System.currentTimeMillis();
 		} finally {
 			ringBuffer.publish(sequence);
 		}
 
-		while (event.response == null) {
+		try {
+			event.countDownLatch.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
 		LOG.info("Sending response from DisruptorService : " + Thread.currentThread().getName());
-		return event.response;
+
+		return event.postsAndCommentsResponse + event.albumsAndPhotosResponse;
 	}
 
 	@Override
@@ -61,65 +125,5 @@ public class DisruptorService {
 		super.finalize();
 		System.out.println("inside finalize");
 		DISRUPTOR.shutdown();
-	}
-
-	static class PostsAndCommentsResponseBuilder implements EventHandler<Event> {
-
-		private static final Logger LOG = LoggerFactory.getLogger(PostsAndCommentsResponseBuilder.class);
-
-		@Override
-		public void onEvent(Event event, long sequence, boolean endOfBatch) throws Exception {
-			setPostsAndCommentsResponse(event);
-			LOG.info("Build PostsAndCommentsResponseBuilder");
-		}
-
-		private void setPostsAndCommentsResponse(Event event) {
-
-			int userId = new Random().nextInt(10) + 1;
-			String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, event.posts,
-					event.comments);
-
-			event.postsAndCommentsResponse = postsAndCommentsOfRandomUser;
-		}
-	}
-
-	static class AlbumsAndPhotosResponseBuilder implements EventHandler<Event> {
-
-		private static final Logger LOG = LoggerFactory.getLogger(AlbumsAndPhotosResponseBuilder.class);
-
-		@Override
-		public void onEvent(Event event, long sequence, boolean endOfBatch) throws Exception {
-			setAlbumsAndPhotosResponse(event);
-			LOG.info("Build AlbumsAndPhotosResponseBuilder ");
-		}
-
-		private void setAlbumsAndPhotosResponse(Event event) {
-
-			int userId = new Random().nextInt(10) + 1;
-			String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, event.albums,
-					event.photos);
-			event.albumsAndPhotosResponse = albumsAndPhotosOfRandomUser;
-
-		}
-	}
-
-	static class MergeAllResponseBuilder implements EventHandler<Event> {
-
-		private static final Logger LOG = LoggerFactory.getLogger(MergeAllResponseBuilder.class);
-
-		@Override
-		public void onEvent(Event event, long sequence, boolean endOfBatch) throws Exception {
-			setResponse(event);
-			long endTime = System.currentTimeMillis();
-			long timeTaken = endTime - event.startTime;
-			LOG.info("Time taken to build response from Disruptor :: " + timeTaken + " - for sequence : " + sequence
-					+ " - in Thread " + Thread.currentThread().getName());
-		}
-
-		private void setResponse(Event event) {
-
-			String response = event.postsAndCommentsResponse + event.albumsAndPhotosResponse;
-			event.response = response;
-		}
 	}
 }

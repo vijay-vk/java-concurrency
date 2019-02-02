@@ -15,35 +15,34 @@ public class CustomThreads {
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-4-"));
 	private static final ExecutorService EXECUTOR_SERVICE_8 = Executors.newFixedThreadPool(8,
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-8-"));
+	private static final ExecutorService EXECUTOR_SERVICE_16 = Executors.newFixedThreadPool(16,
+			new CustomizableThreadFactory("Executor-Service-Pool-Size-16-"));
+	private static final ExecutorService EXECUTOR_SERVICE_24 = Executors.newFixedThreadPool(24,
+			new CustomizableThreadFactory("Executor-Service-Pool-Size-24-"));
 	public static final ExecutorService EXECUTOR_SERVICE_WORKER_1 = Executors.newFixedThreadPool(1,
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-Worker-1-"));
 	public static final ExecutorService EXECUTOR_SERVICE_WORKER_2 = Executors.newFixedThreadPool(1,
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-Worker-2-"));
 
 	public static ExecutorService getExecutorService(int poolSize) {
-		if (poolSize == 1) {
+
+		switch (poolSize) {
+		case 1:
 			return EXECUTOR_SERVICE_1;
-		} else if (poolSize == 2) {
+		case 2:
 			return EXECUTOR_SERVICE_2;
-		} else if (poolSize == 4) {
+		case 4:
 			return EXECUTOR_SERVICE_4;
-		} else if (poolSize == 8) {
+		case 8:
+			return EXECUTOR_SERVICE_8;
+		case 16:
+			return EXECUTOR_SERVICE_16;
+		case 24:
+			return EXECUTOR_SERVICE_24;
+		default:
 			return EXECUTOR_SERVICE_8;
 		}
-		return EXECUTOR_SERVICE_2;
 	}
-
-	/*public static ExecutorService getExecutorService(String worker) {
-
-		if ("worker1".equals(worker)) {
-			return EXECUTOR_SERVICE_WORKER_1;
-		} else if ("worker2".equals(worker)) {
-			return EXECUTOR_SERVICE_WORKER_2;
-		} else {
-			// shouldn't come here.
-			return EXECUTOR_SERVICE_WORKER_1;
-		}
-	}*/
 
 	@Override
 	protected void finalize() throws Throwable {

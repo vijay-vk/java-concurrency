@@ -52,10 +52,10 @@ public class BasicExecutorService {
 
 			int userId = new Random().nextInt(10) + 1;
 
-			if (nonIOPoolSize == 0) {
-				response = getResponseByUsingHttpThreadForNonIoTasks(userId, posts, comments, albums, photos);
-			} else if (fixedWorkerThread) {
+			if (fixedWorkerThread) {
 				response = getResponseByUsingFixedWorkerThreadsForNonIoTasks(userId, posts, comments, albums, photos);
+			} else if (nonIOPoolSize == 0) {
+				response = getResponseByUsingHttpThreadForNonIoTasks(userId, posts, comments, albums, photos);
 			} else {
 				response = getResponseByUsingThreadPoolForNonIoTasks(nonIOPoolSize, userId, posts, comments, albums,
 						photos);

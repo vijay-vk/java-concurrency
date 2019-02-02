@@ -25,9 +25,7 @@ public class NonBlockingAsyncExecutorService {
 
 		try {
 
-			if (ioPoolSize == 0) {
-				useDefaultPoolForIoAndNonIoTasks(httpResponse);
-			} else if (fixedWorkerThreadForNonIoTasks) {
+			if (fixedWorkerThreadForNonIoTasks) {
 				useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(ioPoolSize, httpResponse);
 			} else {
 				useCustomThreadPoolForIoAndNonIoTasks(ioPoolSize, httpResponse);
@@ -35,28 +33,6 @@ public class NonBlockingAsyncExecutorService {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-	}
-
-	private void useDefaultPoolForIoAndNonIoTasks(AsyncResponse httpResponse) {
-
-		int userId = new Random().nextInt(10) + 1;
-		CompletableFuture<String> postsFuture = CompletableFuture.supplyAsync(JsonService::getPosts);
-		CompletableFuture<String> commentsFuture = CompletableFuture.supplyAsync(JsonService::getComments);
-		CompletableFuture<String> albumsFuture = CompletableFuture.supplyAsync(JsonService::getAlbums);
-		CompletableFuture<String> photosFuture = CompletableFuture.supplyAsync(JsonService::getPhotos);
-
-		CompletableFuture<String> postsAndCommentsFuture = postsFuture.thenCombineAsync(commentsFuture,
-				(posts, comments) -> ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments));
-
-		CompletableFuture<String> albumsAndPhotosFuture = albumsFuture.thenCombineAsync(photosFuture,
-				(albums, photos) -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos));
-
-		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
-			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
-			String response = s1 + s2;
-			httpResponse.resume(response);
-		});
-
 	}
 
 	private void useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(int ioPoolSize, AsyncResponse httpResponse) {
@@ -81,8 +57,7 @@ public class NonBlockingAsyncExecutorService {
 
 		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
 			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
-			String response = s1 + s2;
-			httpResponse.resume(response);
+			httpResponse.resume(s1 + s2);
 		}, CustomThreads.EXECUTOR_SERVICE_WORKER_1);
 
 	}

@@ -52,8 +52,8 @@ public class Master extends AbstractActor {
 						e.photos);
 
 				String response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
-				LOG.info("Building final response in Thread : " + Thread.currentThread().getName());
 				e.response = response;
+				e.countDownLatch.countDown();
 			}
 		}).build();
 	}

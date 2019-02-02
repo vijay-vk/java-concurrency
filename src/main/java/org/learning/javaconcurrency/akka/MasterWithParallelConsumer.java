@@ -1,5 +1,7 @@
 package org.learning.javaconcurrency.akka;
 
+import javax.ws.rs.container.AsyncResponse;
+
 import org.learning.javaconcurrency.Event;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +55,7 @@ public class MasterWithParallelConsumer extends AbstractActor {
 
 				String response = e.postsAndCommentsResponse + e.albumsAndPhotosResponse;
 				LOG.info("Building response in Thread : " + Thread.currentThread().getName());
-				e.response = response;
+				e.asyncHttpResponse.resume(response);
 			}
 		}).build();
 	}

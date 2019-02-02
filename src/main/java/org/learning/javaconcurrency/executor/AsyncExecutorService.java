@@ -2,6 +2,7 @@ package org.learning.javaconcurrency.executor;
 
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
 import org.learning.javaconcurrency.CustomThreads;
@@ -23,49 +24,23 @@ public class AsyncExecutorService {
 	public String getAsyncResponse(int ioPoolSize, boolean fixedWorkerThreadForNonIoTasks) {
 
 		Event event = new Event();
-
+		String response = null;
 		try {
-			if (ioPoolSize == 0) {
-				useDefaultPoolForIoAndNonIoTasks(event);
-			} else if (fixedWorkerThreadForNonIoTasks) {
-				useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(ioPoolSize, event);
+			if (fixedWorkerThreadForNonIoTasks) {
+				response = useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(ioPoolSize, event);
 			} else {
-				useCustomThreadPoolForIoAndNonIoTasks(ioPoolSize, event);
+				response = useCustomThreadPoolForIoAndHttpThreadForNonIoTasks(ioPoolSize, event);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 
-		// blocking call from the thread which handles Http Request
-		while (event.response == null) {
-		}
 		LOG.info("Sending response from AsyncExecutorService : " + Thread.currentThread().getName());
-		return event.response;
+		return response;
 	}
 
-	private void useDefaultPoolForIoAndNonIoTasks(Event event) {
-
-		int userId = new Random().nextInt(10) + 1;
-		CompletableFuture<String> postsFuture = CompletableFuture.supplyAsync(JsonService::getPosts);
-		CompletableFuture<String> commentsFuture = CompletableFuture.supplyAsync(JsonService::getComments);
-		CompletableFuture<String> albumsFuture = CompletableFuture.supplyAsync(JsonService::getAlbums);
-		CompletableFuture<String> photosFuture = CompletableFuture.supplyAsync(JsonService::getPhotos);
-
-		CompletableFuture<String> postsAndCommentsFuture = postsFuture.thenCombineAsync(commentsFuture,
-				(posts, comments) -> ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments));
-
-		CompletableFuture<String> albumsAndPhotosFuture = albumsFuture.thenCombineAsync(photosFuture,
-				(albums, photos) -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos));
-
-		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
-			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
-			String response = s1 + s2;
-			event.response = response;
-		});
-
-	}
-
-	private void useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(int ioPoolSize, Event event) {
+	private String useThreadPoolForIoTasksAndWorkerThreadForNonIoTasks(int ioPoolSize, Event event)
+			throws InterruptedException, ExecutionException {
 
 		int userId = new Random().nextInt(10) + 1;
 		ExecutorService ioExecutorService = CustomThreads.getExecutorService(ioPoolSize);
@@ -85,15 +60,15 @@ public class AsyncExecutorService {
 				(albums, photos) -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos),
 				CustomThreads.EXECUTOR_SERVICE_WORKER_2);
 
-		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
+		return postsAndCommentsFuture.thenCombineAsync(albumsAndPhotosFuture, (s1, s2) -> {
 			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
-			String response = s1 + s2;
-			event.response = response;
-		}, CustomThreads.EXECUTOR_SERVICE_WORKER_1);
+			return s1 + s2;
+		}, CustomThreads.EXECUTOR_SERVICE_WORKER_1).get();
 
 	}
 
-	private void useCustomThreadPoolForIoAndNonIoTasks(int ioPoolSize, Event event) {
+	private String useCustomThreadPoolForIoAndHttpThreadForNonIoTasks(int ioPoolSize, Event event)
+			throws InterruptedException, ExecutionException {
 
 		int userId = new Random().nextInt(10) + 1;
 		ExecutorService ioExecutorService = CustomThreads.getExecutorService(ioPoolSize);
@@ -105,19 +80,16 @@ public class AsyncExecutorService {
 		CompletableFuture<String> photosFuture = CompletableFuture.supplyAsync(JsonService::getPhotos,
 				ioExecutorService);
 
-		CompletableFuture<String> postsAndCommentsFuture = postsFuture.thenCombineAsync(commentsFuture,
-				(posts, comments) -> ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments),
-				ioExecutorService);
+		CompletableFuture.allOf(postsFuture, commentsFuture, albumsFuture, photosFuture).get();
 
-		CompletableFuture<String> albumsAndPhotosFuture = albumsFuture.thenCombineAsync(photosFuture,
-				(albums, photos) -> ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos),
-				ioExecutorService);
+		String posts = postsFuture.get();
+		String comments = commentsFuture.get();
+		String albums = albumsFuture.get();
+		String photos = photosFuture.get();
 
-		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
-			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
-			String response = s1 + s2;
-			event.response = response;
-		}, ioExecutorService);
+		String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, posts, comments);
+		String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, albums, photos);
 
+		return postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
 	}
 }
