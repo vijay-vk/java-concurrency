@@ -24,15 +24,20 @@ import com.lmax.disruptor.dsl.Disruptor;
 public class NonBlockingAsyncDisruptorService {
 
 	@SuppressWarnings("deprecation")
-	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024, Executors.newFixedThreadPool(7,
-			new CustomizableThreadFactory("Non-Blocking-Async-Disruptor-Service-Pool-Size-7-")));
+	private static final Disruptor<Event> DISRUPTOR = new Disruptor<>(Event::new, 1024, Executors.newFixedThreadPool(12,
+			new CustomizableThreadFactory("Non-Blocking-Async-Disruptor-Service-Pool-Size-12-")));
 
 	static {
 		DISRUPTOR
-				.handleEventsWith((event, sequence, endOfBatch) -> event.posts = JsonService.getPosts(),
-						(event, sequence, endOfBatch) -> event.comments = JsonService.getComments(),
-						(event, sequence, endOfBatch) -> event.albums = JsonService.getAlbums(),
-						(event, sequence, endOfBatch) -> event.photos = JsonService.getPhotos())
+				.handleEventsWithWorkerPool((event) -> event.posts = JsonService.getPosts(),
+						(event) -> event.posts = JsonService.getPosts(),
+						(event) -> event.posts = JsonService.getPosts())
+				.handleEventsWithWorkerPool((event) -> event.comments = JsonService.getComments())
+				.handleEventsWithWorkerPool((event) -> event.albums = JsonService.getAlbums(),
+						((event) -> event.albums = JsonService.getAlbums()),
+						((event) -> event.albums = JsonService.getAlbums()))
+				.handleEventsWithWorkerPool((event) -> event.photos = JsonService.getPhotos(),
+						(event) -> event.photos = JsonService.getPhotos())
 				.then(new PostsAndCommentsResponseBuilder(), new AlbumsAndPhotosResponseBuilder())
 				.then(new MergeAllResponseBuilder());
 		DISRUPTOR.start();

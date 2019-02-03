@@ -62,7 +62,7 @@ public class NonBlockingAsyncExecutorService {
 
 	}
 
-	private void useCustomThreadPoolForIoAndNonIoTasks(int ioPoolSize, AsyncResponse httpResponse) {
+	private void useCustomThreadPoolForIoAndNonIoTasks(int ioPoolSize, AsyncResponse asyncHttpResponse) {
 
 		int userId = new Random().nextInt(10) + 1;
 		ExecutorService ioExecutorService = CustomThreads.getExecutorService(ioPoolSize);
@@ -85,7 +85,7 @@ public class NonBlockingAsyncExecutorService {
 		postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
 			LOG.info("Building Async Response in Thread " + Thread.currentThread().getName());
 			String response = s1 + s2;
-			httpResponse.resume(response);
+			asyncHttpResponse.resume(response);
 		}, ioExecutorService);
 
 	}

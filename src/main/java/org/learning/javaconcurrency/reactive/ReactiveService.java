@@ -22,7 +22,7 @@ public class ReactiveService {
 	public void sendAsyncResponse(AsyncResponse asyncResponse) {
 
 		int userId = new Random().nextInt(10) + 1;
-		ExecutorService executor = CustomThreads.getExecutorService(8);
+		ExecutorService executor = CustomThreads.getExecutorService(16);
 
 		Observable<String> postsObservable = Observable.just(userId).map(o -> JsonService.getPosts())
 				.subscribeOn(Schedulers.from(executor));
