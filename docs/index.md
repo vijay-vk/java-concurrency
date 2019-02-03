@@ -1,57 +1,52 @@
-# A bird's-eye view on Java concurrency frameworks
+# A Bird's-eye View on Java Concurrency Frameworks
 
-### Objective
-  * Compare different concurrency frameworks to identify the right use-case fit for respective frameworks. (with focus on inter-thread communication features)
-  * How to identify the number of threads required for an application ?
+### The why question
+Few years ago when NoSQL was trending, like every other team, our team was also enthusiastic about the new and exciting stuff and we were planning to change the database in one of the Application... But, when we got into the finer details of implementation, we remembered what wise men say, _"devil is in the details"_ and eventually we realized that NoSql is not a silver bullet to fix all problems and the answer to NoSQL VS RDMS was **_"It depends"_**.  Similarly, in last one year, Concurrency libraries like RX-Java, Spring Reactor were trending with enthusiastic statements like Asynchronous Non-Blocking approach is the way to go, etc... In order to not make the same mistake again, have tried to evaluate how concurrency frameworks like ExecutorService, RX-Java, Disruptor, Akka differ from one another and how to identify the right use-case fit for respective frameworks.
 
-### Sample Use case for analyzing different concurrency frameworks
+#### _**Terminologies** used in this Article is described in this [link](./terminology.md)_
 
-![Use Case](/images/usecase.png)
+### Sample Use case for analyzing concurrency frameworks
+![Use Case](/images/usecase.png)  
 
-* Http Request made to Application
-* Application has to make few network calls and do some CPU Intensive operation before sending response
-* In this use case, 4 network calls will be made for each request
-* When combining API response – CPU Intensive operation (in-memory tasks) has been mocked in following way:
-  * When combining API Response from /posts and /comments API -> Get the pre-defined list (static) which has a list of Integers; multiply each number with a random number to create a new list
-    * Case 1: When shared memory between threads is around ~5MB (Integer list size - 1250000)
-    * Case 2: When shared memory between threads is around ~10MB (Integer list size - 2500000)
-  * When combining API response from /albums and /photos API -> Get the pre-defined list (static) which has list of Long values; multiply each number with a random number to create a new list
-    * Case 1: When shared memory between threads is around ~5MB (Long list size - 625000)
-    * Case 2: When shared memory between threads is around ~10MB (Long list size - 1250000)
-* Combine all response and send the response back to client
+#### Quick refresher on Thread configuration
+Before getting into comparison of concurrency frameworks, a quick refresher on how to configure the optimal number of threads to increase the performance of parallel tasks. This theory applies to all frameworks and the same thread configuration has been used in all frameworks to measure performance.
+* For in-memory tasks, No. of threads = ~No. of cores has the best performance though it can change a bit based on hyper-threading feature in respective processor.
+  * For e.g., In an 8 core machine, if each request to an Application has to do 4 in-memory tasks in parallel, then the load on this machine should be maintained @ 2 req/sec with 8 threads in ThreadPool.
+* For I/O tasks, number of threads configured in ExecutorService should be based on latency of external service  
+  * For e.g., In an 8 core machine, if each request to an Application has to do 4 I/O tasks in parallel, then the load of this machine can be roughly around 4 req/sec with 16 threads configured in ThreadPool
+  * Unlike in-memory task, the thread involved in I/O task will be blocked and it will be in waiting state until external service responds or times out. So, when I/O tasks are involved, as the threads are blocked, the number of threads should be increased to handle the additional load from concurrent requests.
+  * Number of threads for I/O task should be increased in a conservative way as many threads in Active state brings the cost of context-switching which will impact the Application performance. To avoid that, the exact number of threads and load of this machine should be increased proportionately to the waiting time of the threads involved in I/O task.  
 
-### Case 1 (Shared memory between threads less than ~8 MB - Analysis with few concurrency frameworks)
+Reference : <http://baddotrobot.com/blog/2013/06/01/optimum-number-of-threads/>
+
 #### Performance Results
-*These results are subjective to this use-case and doesn't imply one framework is better than other*
+*Performance tests ran in GCP -> processor model name: Intel(R) Xeon(R) CPU @ 2.30GHz; Architecture: x86_64; No. of cores : 8   (Note : These results are subjective to this use-case and doesn't imply one framework is better than other)*
 
 Label | # of requests | Thread Pool size for I/O Tasks | Average Latency in ms (50 req/sec)
 All the operations are in Sequential order | ~10000 | NA | ~2100
 Parallelize IO Tasks with Executor Service and use http-thread for in-memory task | ~10000 | 16 | ~1800
 Parallelize IO Tasks with Executor Service (Completable Future) and use http-thread for in-memory task | ~10000 | 16 | ~1800
-Parallelize All tasks with ExecutorService and use `@Suspended AsyncResponse response` to send response in non-blocking manner  | ~10000 | 16 | 3500
-Use Rx-Java for performing all tasks and use `@Suspended AsyncResponse response` to send response in non-blocking manner  | ~10000 | 16 | 2300
+Parallelize All tasks with ExecutorService and use `@Suspended AsyncResponse response` to send response in non-blocking manner  | ~10000 | 16 | ~3500
+Use Rx-Java for performing all tasks and use `@Suspended AsyncResponse response` to send response in non-blocking manner  | ~10000 | 16 | ~2300
 Parallelize All tasks with Disruptor framework (Http thread will be blocked) | ~10000 | 11 | ~3000
-Parallelize All tasks with Disruptor framework and use `@Suspended AsyncResponse response` to send response in non-blocking manner | ~10000 | 12 | 3500
-Parallelize All tasks with Akka framework (Http thread will be blocked) | ~10000 | | ~3500
+Parallelize All tasks with Disruptor framework and use `@Suspended AsyncResponse response` to send response in non-blocking manner | ~10000 | 12 | ~3500
+Parallelize All tasks with Akka framework (Http thread will be blocked) | ~10000 | | ~3000
 
-#### Parallelize IO Tasks with Executor Service
-* Default way to parallelize tasks in Java
-* No. Of Threads created to run parallel tasks had an impact on Performance
-  * For CPU Intensive tasks (in-memory tasks) - No. of threads = No. of cores + 1 works well
-  * For I/O tasks (API/ Database calls) - No. of threads = No. of cores * 2 (can be the default formula)
-  * If the idle time (waiting time) in I/O operation increases; then no. of threads to handle I/O tasks can be increased.
-  * For e.g., if each API call took ~100ms and Executor pool size was 8; when the consuming API's average latency increases to ~200ms, increasing Executor pool size to 16 performs better. (Reason : Threads are blocked until it receives response or until timeout - additional threads helps in this case to handle the extra load)
-  * But, if latency is even higher, **sequential execution of tasks performs better than handling the tasks in parallel** with 20+ threads (**More threads brings the cost of context-switching**) With single request, parallelizing tasks with executors can perform better; but with concurrent requests, sequential execution performs better. For e.g., when the consuming API's delay was increased to 400 ms from 200 ms, performance of sequential execution looks better.
-  * This result is subjective; it's always good to have a toggle between sequential and parallel execution (decision can be made with metrics)
+### Parallelize IO Tasks with Executor Service  
 
-##### Performance results when API delay is increased to 400 ms
+###### When to use?  
+If an Application is deployed in multiple nodes and if req/sec in each node is less than the no. of cores available, then Executor Service can be used to parallelize tasks and execute faster.
+
+###### When not to use?  
+If an Application is deployed in multiple nodes and if req/sec in each node is much higher than the no. of cores available, then using ExecutorService to further parallelize can only make things worse.
+
+#### Performance results when delay of external service is increased to 400 ms (request rate @ 50 req/sec in 8 core machine)
 
   Label | # of requests | Thread Pool size for I/O Tasks | Average Latency in ms (50 req/sec)
   All the operations are in Sequential order | ~3000 | NA | ~2600
   Parallelize IO Tasks with Executor Service and use http-thread for in-memory task | ~3000 | 24 | ~3000
 
-##### Code
-###### Sequential
+##### Code Example when all tasks are executed in sequential order.
 ```java
 long startTimeOfIOTasks = System.currentTimeMillis();
 String posts = JsonService.getPosts();
@@ -81,7 +76,7 @@ LOG.info("Time Taken for Sequential Service to build response :: " + timeTaken +
 
 return response;
 ```
-###### Code : ExecutorService
+##### Code Example when I/O tasks are executed in parallel with ExecutorService
 ```java
 List<Callable<String>> ioCallableTasks = new ArrayList<>();
 ioCallableTasks.add(JsonService::getPosts);
@@ -103,9 +98,11 @@ String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser
 return postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
 ```
 
-#### Parallelize IO Tasks with Executor Service (CompletableFuture)
-* This works similar to the above one; Http thread which handles the incoming request will be blocked and CompletableFuture is used to handle the parallel tasks
-* Only difference is, CompletableFuture provides DSL to pass call back function and chain sequence of events. (similar to Promise in node application; performance was similar to the previous one)
+### Parallelize IO Tasks with Executor Service (CompletableFuture)
+* This works similar to the above case; Http thread which handles the incoming request will be blocked and CompletableFuture is used to handle the parallel tasks
+
+###### When to use?
+Without AsyncResponse, performance is same as ExecutorService; If multiple API calls has to be async and if it has to be chained, this approach is better. (this is similar to Promises in Node)
 
 ```java
 int userId = new Random().nextInt(10) + 1;
@@ -132,12 +129,16 @@ return postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
 ```
 
 #### Parallelize All tasks with ExecutorService and use `@Suspended AsyncResponse response` to send response in non-blocking way
+![io](/images/io.png)[io vs nio]![nio](/images/nio.png)  
+From <http://tutorials.jenkov.com/java-nio/nio-vs-io.html>  
 * Http thread which handles the Connection of incoming request will pass the processing to Executor Pool and when all tasks are done, another http-thread will send the response back to client. (Asynchronous and non-blocking)
 * Reason for drop in performance
-  * non-blocking is an overloaded terminology; **In synchronous communication - yes, thread was blocked; but the process is not blocked - cpu-cores can not blocked when thread was waiting for I/O task;** cpu-cores can run instructions from other threads; (so, creating additional threads helps to handle additional load with the cost of thread context-switching)
-  * Cost of handling asynchronous non-blocking communication was little high and it's not as optimized as the traditional synchronous http libraries.
-  * Also, looks like, this approach was not meant for use-case like this, asynchronous non-blocking approach is meant for use cases like server-side chat application. (Where a thread need not hold the connection until the client responds back; client may reply back in ~5 min, ~10 mins, ...)
-  * **More often than not, using asynchronous non-blocking approach for use case like we discuss here, will bring down Application performance.**
+  * In synchronous communication, **though the thread involved in I/O task was blocked, the process will still be in running state as long as it has additional threads to take the load of concurrent requests.**
+  * So, the benefit which comes from a keeping a thread in non-blocking manner is very less and the cost involved to handle the request in this pattern seems to be high.
+  * More often than not, **using asynchronous non-blocking approach for use case like we discuss here, will bring down Application performance.**
+
+###### When to use?
+If use case is like a server-side chat Application where a thread need not hold the Connection until client responds, then Async non-blocking approach can be preferred over synchronous communication; in those use cases, rather than just waiting, system resources can be put to better use with asynchronous non-blocking approach.
 
 ```java
 int userId = new Random().nextInt(10) + 1;
@@ -165,10 +166,12 @@ postsAndCommentsFuture.thenAcceptBothAsync(albumsAndPhotosFuture, (s1, s2) -> {
 }, ioExecutorService);
 ```
 
-#### Rx-Java
+### Rx-Java
 * This is similar to above case; only difference is RX-Java gives better DSL to write code in fluid manner (may not be visible with this example)
 * Performance is better than handling parallel tasks with Completable Future
-* RX-Java seems to be better for use-cases where a back-pressure was required to handle the no. of events between producers and consumers (if Asynchronous non-blocking threads suits a use-case, then RX-Java or any reactive libraries can be preferred)
+
+###### When to use?
+If Asynchronous non-blocking approach suits a use-case, then RX-Java or any reactive libraries can be preferred (It has additional capabilities like back-pressure which can balance the load between producers and consumers)  
 
 ```java
 int userId = new Random().nextInt(10) + 1;
@@ -198,10 +201,18 @@ Observable.zip(postsAndCommentsObservable, albumsAndPhotosObservable, (r1, r2) -
 		.subscribe((response) -> asyncResponse.resume(response), e -> asyncResponse.resume("error"));
 ```
 
-#### Disruptor
-* In this first example of Disruptor, http-thread will be blocked until disruptor completes the tasks.
-* This library was not meant for use cases like the one we discuss here. (Added this, just out of curiosity)
-* It performs better when used with event driven architectural patterns and where there is a single producer and multiple consumers. (It handles inter-thread communication without any locks (unlike ExecutorService/Akka) and there is significant performance difference in those use-cases)
+### Disruptor
+![io](/images/queue.png)  
+**[Queue vs RingBuffer]**
+![io](/images/disruptor.jpg)  
+From <http://tutorials.jenkov.com/java-concurrency/blocking-queues.html>  
+From <https://www.baeldung.com/lmax-disruptor-concurrency>  
+* In this example, http-thread will be blocked until disruptor completes the tasks and a CountDownLatch has been used to synchronize the http-thread with the threads from ExecutorService.
+* Main feature of this framework is to handle inter-thread communication without any locks; In ExecutorService, the data between a producer and consumer will be passed via a Queue and there is a **Lock** involved during this data transfer between a producer and a consumer. Disruptor framework handles this Producer-Consumer communication without any Locks with the help of a data-structure called as Ring Buffer which is an extended version of a Circular Array Queue.
+* _This library was not meant for use cases like the one we discuss here; It has been added just out of curiosity..._
+
+###### When to use?
+It performs better when used with event-driven architectural patterns and when there is a single producer and multiple consumers with main focus on in-memory tasks.
 
 ```java
 static {
@@ -240,123 +251,49 @@ try {
 }
 ```
 
-#### Akka
-* akka-actors is used for handling parallel tasks.
-* It can be optimized to perform better than the results shown in above table (but it can't match the traditional approach)
-* Akka libraries are a better fit for use cases where, supervision and monitoring capabilities of child tasks are important and where inter-thread communication has to be scaled-out with inter-process communication (and there are many more features from this library...)
+### Akka
+![Akka-Actors](/images/actor.png)  
+From <https://blog.codecentric.de/en/2015/08/introduction-to-akka-actors/>  
+* The main advantage of Akka library is, it has native support to build Distributed Systems.
+* It runs on a system called as Actor System which abstracts the concept of Threads and Actors in the Actor System communicate via asynchronous messages which is similar to the communication between a Producer and Consumer.
+* This extra level of Abstraction helps the Actor system to provide features like [Fault Tolerance](https://doc.akka.io/docs/akka/2.5/fault-tolerance.html), [Location Transparency](https://doc.akka.io/docs/akka/2.5/general/remoting.html), ...
+* With the right Actor to Thread strategy, this framework can be optimized to perform better than the results shown in above table. Though, it cannot match the performance of a traditional approach on a single node, it can still be preferred for it's capabilities to build Distributed and Resilient systems.
+
 ###### Sample code
+
 ```java
+
+// from controller :
+Actors.masterActor.tell(new Master.Request("Get Response", event, Actors.workerActor), ActorRef.noSender());
+
+// handler :
 public Receive createReceive() {
-  return receiveBuilder().match(Request.class, request -> {
+    return receiveBuilder().match(Request.class, request -> {
 
-  Event event = request.event; // Ideally, immutable data structures should be used here.
-  request.worker.tell(new JsonServiceWorker.Request("posts", event), getSelf());
-  request.worker.tell(new JsonServiceWorker.Request("comments", event), getSelf());
-  request.worker.tell(new JsonServiceWorker.Request("albums", event), getSelf());
-  request.worker.tell(new JsonServiceWorker.Request("photos", event), getSelf());
-  }).match(Event.class, e -> {
-  if (e.posts != null && e.comments != null & e.albums != null & e.photos != null) {
-  	int userId = new Random().nextInt(10) + 1;
-  	String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, e.posts,
-  			e.comments);
-  	String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, e.albums,
-  			e.photos);
+    Event event = request.event; // Ideally, immutable data structures should be used here.
+    request.worker.tell(new JsonServiceWorker.Request("posts", event), getSelf());
+    request.worker.tell(new JsonServiceWorker.Request("comments", event), getSelf());
+    request.worker.tell(new JsonServiceWorker.Request("albums", event), getSelf());
+    request.worker.tell(new JsonServiceWorker.Request("photos", event), getSelf());
+    }).match(Event.class, e -> {
+    if (e.posts != null && e.comments != null & e.albums != null & e.photos != null) {
+    	int userId = new Random().nextInt(10) + 1;
+    	String postsAndCommentsOfRandomUser = ResponseUtil.getPostsAndCommentsOfRandomUser(userId, e.posts,
+    			e.comments);
+    	String albumsAndPhotosOfRandomUser = ResponseUtil.getAlbumsAndPhotosOfRandomUser(userId, e.albums,
+    			e.photos);
 
-  	String response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
-  	e.response = response;
-  	e.countDownLatch.countDown();
-  }
-  }).build();
+    	String response = postsAndCommentsOfRandomUser + albumsAndPhotosOfRandomUser;
+    	e.response = response;
+    	e.countDownLatch.countDown();
+    }
+    }).build();
 }
 ```
 
-### Case 2 (when shared memory between threads is greater than ~8 MB)
-* This can happen for use cases like rule engine - where all incoming requests are validated against pre-defined rules and these rules can grow over time crossing the 8 MB limit.
-* When the shared memory between threads crosses ~8 MB, then handling in-memory tasks with single thread had much better Performance
-* The size (~8 MB) will change based on the processor
-* _Performance was better with single thread execution, as handling huge in-memory data with multiple threads leads to **Cache-Miss** during execution_
-
-#### Cache Miss
-* CPU architecture has multiple layers of cache before fetching any data/object from RAM memory.
-* To map this with JVM memory model, all the objects in Heap memory will reside in RAM.
-* If CPU has to execute the instructions, it has to fetch those data into L1, L2 cache and eventually into CPU registers to execute it.
-* In concurrent use cases, if same data is accessed by both the core simultaneously, then cache memory will not be used effectively.
-
-![Cache-Miss](/images/cache-miss.png)
-
-#### Example of cache-miss
-
-```java
-public class CacheMiss {
-
-	public static void main(String[] args) throws InterruptedException, ExecutionException {
-
-		List<Integer> intList = new ArrayList<>();
-		for (int i = 0; i < 10000000; i++) {
-			intList.add(i);
-		}
-		System.out.println("Main Thread : " + Thread.currentThread().getName());
-
-		doSomeRandomOperationInList(intList);
-		doSomeRandomOperationInList(intList);
-		doSomeRandomOperationInList(intList);
-		doSomeRandomOperationInList(intList);
-		doSomeRandomOperationInList(intList);
-
-		runAsync(intList, 1);
-		runAsync(intList, 2);
-		runAsync(intList, 3);
-		runAsync(intList, 4);
-		runAsync(intList, 5);
-
-		TimeUnit.MINUTES.sleep(1);
-
-	}
-
-	private static void runAsync(List<Integer> intList, int t) {
-		CompletableFuture.runAsync(() -> {
-			System.out.println("new thread - " + t + " : " + Thread.currentThread().getName());
-			long s = System.currentTimeMillis();
-			List<Integer> l = intList.stream().map(i -> i * 2).collect(Collectors.toList());
-			long e = System.currentTimeMillis();
-			System.out.println("Thread : " + t + " : " + (e - s));
-		});
-	}
-
-	private static void doSomeRandomOperationInList(List<Integer> intList) {
-		long startTime = System.currentTimeMillis();
-		intList.stream().map(i -> i * 2).collect(Collectors.toList());
-		long endTime = System.currentTimeMillis();
-		System.out.println(
-				"Thread : " + Thread.currentThread().getName() + " : Time Taken in (ms) : " + (endTime - startTime));
-	}
-
-}
-// Output
-// Main Thread : main
-// Thread : main : Time Taken in (ms) : 1838
-// Thread : main : Time Taken in (ms) : 490
-// Thread : main : Time Taken in (ms) : 542
-// Thread : main : Time Taken in (ms) : 322
-// Thread : main : Time Taken in (ms) : 325
-// new thread - 1 : ForkJoinPool.commonPool-worker-1
-// new thread - 3 : ForkJoinPool.commonPool-worker-3
-// new thread - 2 : ForkJoinPool.commonPool-worker-2
-// new thread - 4 : ForkJoinPool.commonPool-worker-4
-// new thread - 5 : ForkJoinPool.commonPool-worker-5
-// Thread : 5 : 15178
-// Thread : 1 : 15178
-// Thread : 4 : 15179
-// Thread : 2 : 15200
-// Thread : 3 : 15202
-````
-
-* doSomeRandomOperation method accesses the list and creates a new list (doesn’t modify existing list)
-* Calling doSomeRandomOperation (5 times) method from Main method results in ~500 ms
-* But, when the same list is accessed by 5 threads in parallel, it takes 15178 ms
-
+#### A special case (when shared memory between threads crosses ~8MB) has been discussed in this [link](./java-cache-miss.md)
 
 ### Summary :
-* Decide concurrency frameworks based on the use-case (Also, in some cases, sequential execution may perform better; always have a toggle between sequential execution and parallel execution; measure and decide which performs better)
-* Using Reactive (or any Asynchronous libraries) decreases the performance for most of the traditional applications (It's useful only when the use case is like server-side chat application, where the thread need not retain the connection until the client responds)
-* Performance of Disruptor framework was good when used with event-driven architectural patterns; but when used in a use case as discussed here (with the traditional architecture), it was not upto the mark. (Akka and Disruptor libraries deserve a separate post by using with event driven patterns)
+* Decide Executor framework's configuration based on the load of the machine and also check if load balancing can be done based on the number of parallel tasks in the Application.
+* Using Reactive or any Asynchronous libraries decreases the performance for most of the traditional applications. This pattern is useful only when the use case is like a server-side chat application, where the thread need not retain the connection until the client responds.
+* Performance of Disruptor framework was good when used with event-driven architectural patterns; but when disruptor pattern was mixed with a traditional architecture and for a use case as we discussed here, it was not up-to the mark. (Akka and Disruptor libraries deserve a separate post by using with event-driven architectural patterns)
