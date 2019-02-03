@@ -10,15 +10,15 @@ public class JsonService {
 	private static final RestTemplate restTemplate = new RestTemplate();
 	private static final String USER_API = "https://jsonplaceholder.typicode.com/users";
 	//JSON Place Holder
-	private static final String POSTS_API = "https://jsonplaceholder.typicode.com/posts";
-	private static final String COMMENTS_API = "https://jsonplaceholder.typicode.com/comments";
-	private static final String ALBUMS_API = "https://jsonplaceholder.typicode.com/albums";
-	private static final String PHOTOS_API = "https://jsonplaceholder.typicode.com/photos";
-	//Mocky.io
-//	private static final String POSTS_API = "http://www.mocky.io/v2/5c3ddcc235000012003e9646?mocky-delay=400ms";
+//	private static final String POSTS_API = "https://jsonplaceholder.typicode.com/posts";
 //	private static final String COMMENTS_API = "https://jsonplaceholder.typicode.com/comments";
-//	private static final String ALBUMS_API = "http://www.mocky.io/v2/5c3ddf1c3500002d003e9651?mocky-delay=400ms";
+//	private static final String ALBUMS_API = "https://jsonplaceholder.typicode.com/albums";
 //	private static final String PHOTOS_API = "https://jsonplaceholder.typicode.com/photos";
+	//Mocky.io to add delay in response time
+	private static final String POSTS_API = "http://www.mocky.io/v2/5c3ddcc235000012003e9646?mocky-delay=500ms";
+	private static final String COMMENTS_API = "https://jsonplaceholder.typicode.com/comments";
+	private static final String ALBUMS_API = "http://www.mocky.io/v2/5c3ddf1c3500002d003e9651?mocky-delay=400ms";
+	private static final String PHOTOS_API = "https://jsonplaceholder.typicode.com/photos";
 
 	public static String getUsers() {
 
