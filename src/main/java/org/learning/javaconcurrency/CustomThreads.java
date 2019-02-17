@@ -19,6 +19,12 @@ public class CustomThreads {
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-16-"));
 	private static final ExecutorService EXECUTOR_SERVICE_24 = Executors.newFixedThreadPool(24,
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-24-"));
+	private static final ExecutorService EXECUTOR_SERVICE_32 = Executors.newFixedThreadPool(32,
+			new CustomizableThreadFactory("Executor-Service-Pool-Size-32-"));
+	private static final ExecutorService EXECUTOR_SERVICE_40 = Executors.newFixedThreadPool(40,
+			new CustomizableThreadFactory("Executor-Service-Pool-Size-40-"));
+	private static final ExecutorService EXECUTOR_SERVICE_48 = Executors.newFixedThreadPool(48,
+			new CustomizableThreadFactory("Executor-Service-Pool-Size-48-"));
 	public static final ExecutorService EXECUTOR_SERVICE_WORKER_1 = Executors.newFixedThreadPool(1,
 			new CustomizableThreadFactory("Executor-Service-Pool-Size-Worker-1-"));
 	public static final ExecutorService EXECUTOR_SERVICE_WORKER_2 = Executors.newFixedThreadPool(1,
@@ -39,6 +45,12 @@ public class CustomThreads {
 			return EXECUTOR_SERVICE_16;
 		case 24:
 			return EXECUTOR_SERVICE_24;
+		case 32:
+			return EXECUTOR_SERVICE_32;
+		case 40:
+			return EXECUTOR_SERVICE_40;
+		case 48:
+			return EXECUTOR_SERVICE_48;
 		default:
 			return EXECUTOR_SERVICE_8;
 		}
